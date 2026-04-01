@@ -1,6 +1,26 @@
 from pydantic import BaseModel
 from typing import Optional
 
+ESPN_WEIGHTS = {
+    "points": 1.0,
+    "rebounds": 1.0,
+    "assists": 2.0,
+    "steals": 4.0,
+    "blocks": 4.0,
+    "turnovers": -2.0,
+    "fg_made": 2.0,
+    "fg_attempt": -1.0,
+    "ft_made": 1.0,
+    "ft_attempt": -1.0,
+    "three_made": 1.0
+}
+
+SIGNAL_WEIGHTS = {
+    "replacement": 0.33,
+    "minutes_trend": 0.33,
+    "sustainability": 0.34
+}
+
 class PlayerStats(BaseModel):
     player_id: int
     name: str

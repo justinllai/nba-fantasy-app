@@ -1,6 +1,6 @@
 # NBA Fantasy App — Build Log
 
-## Session 1 — 03/16/26
+## Session 1 — 03/16/26 Justin
 **What we built:** Ran speckit/spec & speckit/plan to generate full technical blueprint before writing any code.
 
 **Why:** Never code without a plan. Speckit reads your feature description and generates a plan automatically.
@@ -12,7 +12,7 @@
 
 ---
 
-## Session 2 — 03/18/26
+## Session 2 — 03/18/26 Justin
 **What we built:** Folder structure, requirements.txt, main.py, .gitignore, GitHub repo connected & pushed.
 
 **Key decisions:**
@@ -22,12 +22,12 @@
 
 ---
 
-## Session 3 — 03/23/26
+## Session 3 — 03/23/26 Justin
 **What we built:** .env file, README.md, Phase 1 complete.
 
 ---
 
-## Session 4 — 03/31/26
+## Session 4 — 03/31/26 Justin
 **What we built:** T006 — PlayerStats data model in scoring.py. Set up docs/ folder.
 
 **Key decisions:**

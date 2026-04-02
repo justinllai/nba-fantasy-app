@@ -30,6 +30,8 @@
 ## Session 4 — 03/31/26 Justin
 **What we built:** T006 — PlayerStats data model in scoring.py. Set up docs/ folder.
 
+
+
 **Key decisions:**
 - Pydantic BaseModel over plain dict or @dataclass — auto type validation, built for FastAPI
 - One flat class over multiple classes — one object travels through whole app, simpler for V1

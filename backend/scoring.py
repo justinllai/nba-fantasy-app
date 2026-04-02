@@ -46,15 +46,21 @@ class PlayerStats(BaseModel):
 
 def calculate_fppg(player: PlayerStats) -> float:
     total = 0.0
-    total += player.points * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.assists * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
-    total += player.rebounds * ESPN_WEIGHTS
+    total += player.points * ESPN_WEIGHTS["points"]
+    total += player.rebounds * ESPN_WEIGHTS["rebounds"]
+    total += player.assists * ESPN_WEIGHTS["assists"]
+    total += player.steals * ESPN_WEIGHTS["steals"]
+    total += player.blocks * ESPN_WEIGHTS["blocks"]
+    total += player.turnovers * ESPN_WEIGHTS["turnovers"]
+    total += player.fg_made * ESPN_WEIGHTS["fg_made"]
+    total += player.fg_attempt * ESPN_WEIGHTS["fg_attempt"]
+    total += player.ft_made * ESPN_WEIGHTS["ft_made"]
+    total += player.ft_attempt * ESPN_WEIGHTS["ft_attempt"]
+    total += player.three_made * ESPN_WEIGHTS["three_made"]
+    
+    return total
+
+def normalize(value: float, min_val: float, max_val: float) -> float:
+    if max_val == min_val:
+        return 0.0
+    return (value - min_val) / (max_val - min_val) * 100

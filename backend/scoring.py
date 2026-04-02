@@ -21,6 +21,8 @@ SIGNAL_WEIGHTS = {
     "sustainability": 0.34
 }
 
+RECENT_GAMES_WINDOW = 5
+
 class PlayerStats(BaseModel):
     player_id: int
     name: str
@@ -64,3 +66,29 @@ def normalize(value: float, min_val: float, max_val: float) -> float:
     if max_val == min_val:
         return 0.0
     return (value - min_val) / (max_val - min_val) * 100
+
+def calculate_replacement_value(player: PlayerStats) -> float:
+    score = 0.0
+    
+    if player.injured_starter_replacement:
+        score += 50.0
+    
+    if player.recent_minutes:
+        avg_recent = sum(player.recent_minutes) / len(player.recent_minutes)
+        minutes_boost = avg_recent - player.mins_per_game
+        if minutes_boost > 0:
+            score += minutes_boost * 5
+    
+    return score
+
+def calculate_minutes_trend(player: PlayerStats) -> float:
+    if not player.recent_minutes:
+        return 0.0
+    
+    first_half = player.recent_minutes[:2]
+    second_half = player.recent_minutes[2:]
+    
+    avg_first = sum(first_half) / len(first_half)
+    avg_second = sum(second_half) / len(second_half)
+    
+    return avg_second - avg_first

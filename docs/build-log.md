@@ -30,6 +30,27 @@
 ## Session 4 — 03/31/26 Justin
 **What we built:** T006 — PlayerStats data model in scoring.py. Set up docs/ folder.
 
+## Session 5 — 04/01/26 Justin
+**What we built:** T007 ESPN scoring constants, 
+T008 FPPG calculator function.
+
+---
+
+## Session 6 — 04/02/26 Justin
+**What we built:** T009 normalize function, 
+T010 replacement value signal, T011 minutes 
+trend signal.
+
+**Key decisions:**
+- normalize() guards against division by zero
+  with a guard clause
+- RECENT_GAMES_WINDOW = 5 as a named constant
+  so changing window size only requires one update
+- Minutes trend splits list in half and compares
+  averages — more robust than first vs last game
+- Used len() over hardcoded numbers so function
+  adapts if RECENT_GAMES_WINDOW changes
+
 
 
 **Key decisions:**

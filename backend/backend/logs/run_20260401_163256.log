@@ -1,0 +1,3 @@
+2026-04-01 16:32:56 | INFO | Pipeline run 20260401_163256 started: data_types=['box_scores'], player_or_team='LAL', season=2024
+2026-04-01 16:32:56 | INFO | Processing data type: box_scores
+2026-04-01 16:32:56 | INFO | Ingesting box_scores for team='LAL' season 2024

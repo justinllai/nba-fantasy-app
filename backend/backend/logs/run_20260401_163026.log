@@ -1,0 +1,11 @@
+2026-04-01 16:30:26 | INFO | Pipeline run 20260401_163026 started: data_types=['game_logs'], player_or_team='LeBron James', season=2024
+2026-04-01 16:30:26 | INFO | Processing data type: game_logs
+2026-04-01 16:30:26 | INFO | Ingesting game_logs for 'LeBron James' season 2024
+2026-04-01 16:30:27 | INFO | game_logs ingestion complete: 87 rows
+2026-04-01 16:30:27 | INFO | Raw parquet written: backend/data/raw/game_logs_lebron_james_2024.parquet
+2026-04-01 16:30:27 | INFO | validation passed for game_logs
+2026-04-01 16:30:27 | INFO | deduplication by game_id: 0 duplicates removed
+2026-04-01 16:30:27 | INFO | removed 12 DNP rows (min == 0)
+2026-04-01 16:30:27 | INFO | flagged 11 outlier rows (1.5x IQR Tukey fence)
+2026-04-01 16:30:27 | INFO | Clean parquet written: backend/data/clean/game_logs_lebron_james_2024.parquet
+2026-04-01 16:30:27 | INFO | Pipeline run 20260401_163026 complete: ['game_logs']

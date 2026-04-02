@@ -1,0 +1,9 @@
+2026-04-01 16:28:36 | INFO | Pipeline run 20260401_162836 started: data_types=['game_logs'], player_or_team='LeBron James', season=2024
+2026-04-01 16:28:36 | INFO | Processing data type: game_logs
+2026-04-01 16:28:36 | INFO | Ingesting game_logs for 'LeBron James' season 2024
+2026-04-01 16:28:37 | INFO | game_logs ingestion complete: 87 rows
+2026-04-01 16:28:37 | INFO | Raw parquet written: backend/data/raw/game_logs_lebron_james_2024.parquet
+2026-04-01 16:28:37 | WARNING | Validation failures:
+  column 'min' has dtype 'str' but expected float
+2026-04-01 16:28:37 | ERROR | Failed to process game_logs: Validation failed for game_logs: column 'min' has dtype 'str' but expected float
+2026-04-01 16:28:37 | INFO | Pipeline run 20260401_162836 complete: ['game_logs']

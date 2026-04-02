@@ -1,0 +1,19 @@
+{
+  "data_type": "game_logs",
+  "player_or_team": "LeBron James",
+  "season": 2024,
+  "rows": 87,
+  "columns": [
+    "game_id",
+    "player_name",
+    "team",
+    "date",
+    "min",
+    "pts",
+    "reb",
+    "ast",
+    "stl",
+    "blk"
+  ],
+  "written_at": "2026-04-01T16:30:27"
+}

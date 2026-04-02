@@ -42,3 +42,19 @@ class PlayerStats(BaseModel):
 
     recent_minutes: Optional[list] = None
     injured_starter_replacement: Optional[bool] = None
+
+
+def calculate_fppg(player: PlayerStats) -> float:
+    total = 0.0
+    total += player.points * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.assists * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS
+    total += player.rebounds * ESPN_WEIGHTS

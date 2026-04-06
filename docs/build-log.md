@@ -57,3 +57,9 @@ trend signal.
 - Pydantic BaseModel over plain dict or @dataclass — auto type validation, built for FastAPI
 - One flat class over multiple classes — one object travels through whole app, simpler for V1
 - Optional fields for recent_minutes and injured_starter_replacement — real world data is incomplete
+
+## Session 7 — 04/06/26 (Justin)
+**Starting at:** T012 — Sustainability signal
+**What we built:** T012 — calculate_sustainability function with FG%/FT% 
+averaging and zero free throw edge case handled
+**Next:** T013 — Combine all signals into final pickup score

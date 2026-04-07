@@ -64,3 +64,102 @@ trend signal.
 - T012 — calculate_sustainability function with FG%/FT% averaging and zero free throw edge case handled
 - T013 — calculate_pickup_score, Signal Engine fully complete
 **Next:** T014 — cache.py in-memory cache layer
+
+
+
+
+
+
+
+
+
+
+
+
+## Sesion 8 -04/07/26 Carson
+  # Pipeline Data Log — `run()`
+
+**File:** `backend/pipeline/run.py`
+
+---
+
+## What It Does
+
+The `run()` function is the main entry point for the data pipeline. Given a list of data types, a player or team, and a season, it fetches, validates, cleans, and saves NBA data from the BallDontLie API.
+
+It runs **5 steps for every data type** passed in — always in this order:
+
+| Step | Name | What happens |
+|---|---|---|
+| 1 | **Ingest** | Fetches data from the BallDontLie API and loads it into a raw DataFrame |
+| 2 | **Save Raw** | Writes the raw DataFrame to `backend/data/raw/*.parquet` with a `.json` sidecar |
+| 3 | **Validate** | Checks required columns, data types, and row count (minimum 10 rows for `game_logs`) |
+| 4 | **Clean** | Removes nulls, (flags does not delete)outliers, and duplicates — flags corrupted rows |
+| 5 | **Save Clean** | Writes the cleaned DataFrame to `backend/data/clean/*.parquet` with a `.json` sidecar |
+
+If validation fails at step 3, the pipeline raises immediately and skips steps 4 and 5.
+
+---
+
+## How to Use
+
+```python
+from backend.pipeline.run import run
+
+results = run(
+    data_types=["game_logs", "season_averages"],
+    player_or_team="LeBron James",
+    season=2024
+)
+```
+
+---
+
+## Parameters
+
+| Param | Type | What to pass |
+|---|---|---|
+| `data_types` | `list[str]` | One or more of: `"game_logs"`, `"box_scores"`, `"game_scores"`, `"season_averages"` |
+| `player_or_team` | `str` | Player name, team abbreviation, or game ID |
+| `season` | `int` | Season year — e.g. `2024` |
+
+---
+
+## Output
+
+Returns a dict keyed by data type on success:
+
+```python
+{
+  "game_logs": {
+    "rows_before": 82,        # row count before cleaning
+    "rows_after": 80,         # row count after cleaning
+    "outliers_flagged": 1,    # rows flagged as outliers
+    "corrupted_removed": 1,   # rows removed as corrupted
+    "nulls_found": 3,         # null values detected
+    "file_path": "/abs/path/to/clean/game_logs_lebron_james_2024.parquet"
+  }
+}
+```
+
+Returns `{"error": "..."}` if any step fails.
+
+---
+
+## Error Handling
+
+- **API retries** — failed requests retry up to 3× with exponential backoff: 1s → 2s → 4s
+- **Validation failures** — raise immediately; clean and save steps are skipped for that data type
+- **Environment** — requires `BALL_IS_LIFE` env var set in `backend/.env`
+
+---
+
+## File Outputs
+
+| Type | Location | Format |
+|---|---|---|
+| Raw data | `backend/data/raw/` | `.parquet` + `.json` sidecar |
+| Clean data | `backend/data/clean/` | `.parquet` + `.json` sidecar |
+
+Filenames follow the pattern: `{data_type}_{player_or_team}_{season}.parquet`
+Example: `game_logs_lebron_james_2024.parquet`

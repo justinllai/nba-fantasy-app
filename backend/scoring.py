@@ -47,6 +47,8 @@ class PlayerStats(BaseModel):
     ft_made: float
     ft_attempt: float
     three_made: float
+    fg_pct: float
+    ft_pct: float
 
     recent_minutes: Optional[list] = None
     injured_starter_replacement: Optional[bool] = None
@@ -100,12 +102,12 @@ def calculate_minutes_trend(player: PlayerStats) -> float:
     return avg_second - avg_first
 
 def calculate_sustainability(player: PlayerStats) -> float:
-    if player.ft_attempt > 0:
-        ft_pct = player.ft_made / player.ft_attempt
+    if player.ft_pct is not None:
+        ft_pct = player.ft_pct
     else:
-        ft_pct = player.fg_made / player.fg_attempt
+        ft_pct = player.fg_pct
 
-    sustainability_score = (player.fg_made / player.fg_attempt + ft_pct) / 2
+    sustainability_score = (player.fg_pct + ft_pct) / 2
     return sustainability_score
 
 def calculate_pickup_score(player: PlayerStats) -> float:

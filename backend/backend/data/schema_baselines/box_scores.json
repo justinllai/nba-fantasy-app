@@ -1,0 +1,19 @@
+{
+  "data_type": "box_scores",
+  "columns": [
+    "ast",
+    "blk",
+    "date",
+    "game_id",
+    "min",
+    "player_id",
+    "player_name",
+    "pts",
+    "reb",
+    "season",
+    "stl",
+    "team",
+    "team_id"
+  ],
+  "written_at": "2026-04-14T20:26:10"
+}

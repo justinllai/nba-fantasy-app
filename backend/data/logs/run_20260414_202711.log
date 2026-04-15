@@ -1,0 +1,16 @@
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 started: data_types=['game_logs'], player=2023, team=None, season=LeBron James, columns=None
+2026-04-14 20:27:11 | INFO | Processing game_logs
+2026-04-14 20:27:11 | ERROR | [game_logs] pipeline failed: invalid literal for int() with base 10: 'LeBron James'
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 complete
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 started: data_types=['game_logs'], player=2023, team=None, season=LeBron James, columns=None
+2026-04-14 20:27:11 | INFO | Processing game_logs
+2026-04-14 20:27:11 | ERROR | [game_logs] pipeline failed: invalid literal for int() with base 10: 'LeBron James'
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 complete
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 started: data_types=['game_logs'], player=2023, team=None, season=LeBron James, columns=None
+2026-04-14 20:27:11 | INFO | Processing game_logs
+2026-04-14 20:27:11 | ERROR | [game_logs] pipeline failed: invalid literal for int() with base 10: 'LeBron James'
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 complete
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 started: data_types=['game_logs'], player=2023, team=None, season=LeBron James, columns=None
+2026-04-14 20:27:11 | INFO | Processing game_logs
+2026-04-14 20:27:11 | ERROR | [game_logs] pipeline failed: invalid literal for int() with base 10: 'LeBron James'
+2026-04-14 20:27:11 | INFO | Pipeline run 20260414_202711 complete

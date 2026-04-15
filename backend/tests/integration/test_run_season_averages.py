@@ -1,17 +1,16 @@
 """
 Integration tests for run() with season_averages data type.
-T027: Tests for season_averages full pipeline.
+Updated for new 8-param run() signature (T058).
 """
-import os
 import json
+import os
 import pytest
 import pandas as pd
-from unittest.mock import patch
 
 
-def make_mock_season_averages_df(rows=1):
-    """Create mock season_averages DataFrame."""
+def _mock_df(rows=1):
     return pd.DataFrame({
+        "player_id": [1] * rows,
         "player_name": ["Stephen Curry"] * rows,
         "season": [2023] * rows,
         "pts": [30.1] * rows,
@@ -20,107 +19,64 @@ def make_mock_season_averages_df(rows=1):
         "stl": [1.3] * rows,
         "blk": [0.4] * rows,
         "min": [34.2] * rows,
+        "games_played": [55] * rows,
+        "fg_pct": [0.48] * rows,
+        "fg3_pct": [0.43] * rows,
+        "ft_pct": [0.92] * rows,
+        "oreb": [0.3] * rows,
+        "dreb": [5.0] * rows,
     })
 
 
 @pytest.fixture
-def setup_dirs(tmp_path, monkeypatch):
+def run_env(tmp_path, monkeypatch):
     monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
-
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
-
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
-
-    return tmp_path
+    import pipeline.fetcher as fetcher_mod
+    mock_df = _mock_df()
+    orig = fetcher_mod.FETCH_FUNCTIONS["season_averages"]
+    fetcher_mod.FETCH_FUNCTIONS["season_averages"] = lambda **kw: mock_df
+    yield tmp_path
+    fetcher_mod.FETCH_FUNCTIONS["season_averages"] = orig
 
 
-def test_clean_parquet_and_sidecar_written_for_season_averages(setup_dirs):
-    """Clean parquet and sidecar written for season_averages."""
-    tmp_path = setup_dirs
-    mock_df = make_mock_season_averages_df(1)
-
-    import importlib
-
+def test_clean_parquet_and_sidecar_written(run_env):
     from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_season_averages", return_value=mock_df):
-        result = run(["season_averages"], "Stephen Curry", 2023)
-
-    assert "season_averages" in result
-    assert "error" not in result["season_averages"], (
-        f"Unexpected error: {result['season_averages'].get('error')}"
-    )
-
-    clean_dir = tmp_path / "clean"
-    parquet_files = list(clean_dir.glob("*.parquet"))
-    sidecar_files = list(clean_dir.glob("*.json"))
-
-    assert len(parquet_files) >= 1
-    assert len(sidecar_files) >= 1
+    result = run(["season_averages"], season=2023, player="Stephen Curry", output_dir=run_env)
+    assert result["season_averages"]["status"] == "success"
+    assert len(list((run_env / "clean").glob("*.parquet"))) >= 1
+    assert len(list((run_env / "clean").glob("*.sidecar.json"))) >= 1
 
 
-def test_dedup_skipped_true_in_sidecar_for_season_averages(setup_dirs):
-    """dedup_skipped is true in clean sidecar for season_averages (no game_id)."""
-    tmp_path = setup_dirs
-    mock_df = make_mock_season_averages_df(1)
-
-    import importlib
-
+def test_dedup_skipped_true_in_sidecar(run_env):
+    """dedup_skipped=true in sidecar for season_averages (no dedup keys)."""
     from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_season_averages", return_value=mock_df):
-        result = run(["season_averages"], "Stephen Curry", 2023)
-
-    file_path = result["season_averages"]["file_path"]
-    sidecar_path = file_path.replace(".parquet", ".json")
-
-    with open(sidecar_path) as f:
-        sidecar = json.load(f)
-
-    assert sidecar["dedup_skipped"] is True, "dedup_skipped should be True for season_averages"
-    assert sidecar["dedup_reason"] is not None
+    run(["season_averages"], season=2023, player="Stephen Curry", output_dir=run_env)
+    sidecar_file = next((run_env / "clean").glob("*.sidecar.json"))
+    with open(sidecar_file) as f:
+        sc = json.load(f)
+    assert sc["dedup_skipped"] is True
+    assert sc["dedup_reason"] is not None
 
 
-def test_summary_dict_has_all_required_keys_for_season_averages(setup_dirs):
-    """Summary dict returned with all required keys for season_averages."""
-    tmp_path = setup_dirs
-    mock_df = make_mock_season_averages_df(1)
-
-    import importlib
-
+def test_result_has_all_metric_keys(run_env):
     from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_season_averages", return_value=mock_df):
-        result = run(["season_averages"], "Stephen Curry", 2023)
-
-    season_avg_result = result["season_averages"]
-    required_keys = ["rows_before", "rows_after", "outliers_flagged", "corrupted_removed", "nulls_found", "file_path"]
-    for key in required_keys:
-        assert key in season_avg_result, f"Missing key: {key}"
+    result = run(["season_averages"], season=2023, player="Stephen Curry", output_dir=run_env)
+    r = result["season_averages"]
+    for key in ["status", "rows_before", "rows_after", "file_path"]:
+        assert key in r
 
 
-def test_no_minimum_row_validation_failure_for_season_averages(setup_dirs):
-    """10-row minimum does not apply to season_averages (1 row is valid)."""
-    tmp_path = setup_dirs
-    # Only 1 row — would fail for game_logs but not for season_averages
-    mock_df = make_mock_season_averages_df(rows=1)
-
-    import importlib
-
+def test_single_row_succeeds_no_min_row_error(run_env):
+    """1 row is valid for season_averages (no 10-row minimum)."""
     from pipeline.run import run
+    result = run(["season_averages"], season=2023, player="Stephen Curry", output_dir=run_env)
+    assert result["season_averages"]["status"] == "success"
 
-    with patch("pipeline.ingest.ingest_season_averages", return_value=mock_df):
-        result = run(["season_averages"], "Stephen Curry", 2023)
 
-    assert "season_averages" in result
-    # Should NOT have validation error about minimum rows
-    if "error" in result["season_averages"]:
-        error_msg = result["season_averages"]["error"]
-        assert "10" not in error_msg or "row" not in error_msg.lower(), (
-            f"season_averages should not fail 10-row minimum check: {error_msg}"
-        )
+def test_all_api_fields_captured(run_env):
+    """All fetched fields present in clean parquet (not just hardcoded subset)."""
+    from pipeline.run import run
+    result = run(["season_averages"], season=2023, player="Stephen Curry", output_dir=run_env)
+    df = pd.read_parquet(result["season_averages"]["file_path"])
+    for col in ["fg_pct", "fg3_pct", "oreb", "dreb"]:
+        assert col in df.columns

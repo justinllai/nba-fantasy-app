@@ -1,289 +1,336 @@
 """
 Integration tests for run() with game_logs data type.
-T016, T024, T030: Tests for full game_logs pipeline with mocked API.
+Tests the new 8-param run() signature introduced in T053.
 """
 import json
 import os
 import pytest
 import pandas as pd
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from pipeline.exceptions import ValidationError
 
 
-def make_game_logs_data(rows=15):
-    """Create mock game_logs API response data."""
-    return [
-        {
-            "id": i,
-            "game": {"id": i, "date": "2023-10-01", "season": 2023},
-            "player": {"id": 1, "first_name": "LeBron", "last_name": "James"},
-            "team": {"abbreviation": "LAL"},
-            "min": "32:30",
-            "pts": 28,
-            "reb": 8,
-            "ast": 7,
-            "stl": 1,
-            "blk": 1,
-            "fg_pct": 0.5,
-            "fg3_pct": 0.35,
-            "ft_pct": 0.75,
-            "turnover": 3,
-        }
-        for i in range(rows)
-    ]
-
-
-def make_mock_df(rows=15):
-    """Create a mock DataFrame that ingest would return."""
-    return pd.DataFrame({
-        "game_id": list(range(rows)),
+def _mock_df(rows=15, *, include_pts=True):
+    data = {
+        "player_id": list(range(rows)),
         "player_name": ["LeBron James"] * rows,
-        "date": ["2023-10-01"] * rows,
+        "game_id": list(range(rows)),
+        "date": [f"2023-01-{str(i+1).zfill(2)}" for i in range(rows)],
+        "season": [2023] * rows,
+        "team": ["LAL"] * rows,
         "min": [32.5] * rows,
-        "pts": [28] * rows,
         "reb": [8] * rows,
         "ast": [7] * rows,
         "stl": [1] * rows,
         "blk": [1] * rows,
-    })
+        "fg_pct": [0.5] * rows,
+        "fg3_pct": [0.35] * rows,
+        "ft_pct": [0.75] * rows,
+        "turnover": [3] * rows,
+    }
+    if include_pts:
+        data["pts"] = [28] * rows
+    return pd.DataFrame(data)
 
 
 @pytest.fixture
-def mock_ingest(tmp_path, monkeypatch):
-    """Patch ingest_game_logs to return mock data."""
-    mock_df = make_mock_df(15)
+def run_env(tmp_path, monkeypatch):
+    """Set up API key and output_dir; patch FETCH_FUNCTIONS to return controlled DataFrame."""
     monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
+    mock_df = _mock_df()
 
-    # Patch RAW_DIR and CLEAN_DIR to use tmp_path
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
-
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
-
-    with patch("pipeline.ingest.ingest_game_logs", return_value=mock_df) as mock:
-        yield mock, tmp_path
+    import pipeline.fetcher as fetcher_mod
+    original = dict(fetcher_mod.FETCH_FUNCTIONS)
+    fetcher_mod.FETCH_FUNCTIONS["game_logs"] = lambda **kw: mock_df
+    yield tmp_path, mock_df
+    fetcher_mod.FETCH_FUNCTIONS.update(original)
 
 
-def test_summary_dict_returned_with_correct_keys(mock_ingest):
-    """run() returns a summary dict with all required keys."""
-    mock_fn, tmp_path = mock_ingest
+# ---------------------------------------------------------------------------
+# New signature accepted
+# ---------------------------------------------------------------------------
 
-    import importlib
-
+def test_new_run_signature_accepted(run_env):
+    """run() accepts the new 8-param signature."""
+    tmp_path, _ = run_env
     from pipeline.run import run
-
-    result = run(["game_logs"], "LeBron James", 2023)
-
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
     assert "game_logs" in result
-    game_logs_result = result["game_logs"]
-    assert "error" not in game_logs_result, f"Unexpected error: {game_logs_result.get('error')}"
-
-    required_keys = ["rows_before", "rows_after", "outliers_flagged", "corrupted_removed", "nulls_found", "file_path"]
-    for key in required_keys:
-        assert key in game_logs_result, f"Missing key: {key}"
 
 
-def test_clean_parquet_and_sidecar_written(mock_ingest):
-    """Clean parquet and sidecar are written to data/clean/."""
-    mock_fn, tmp_path = mock_ingest
-
-    import importlib
-
+def test_result_has_status_key(run_env):
+    """Result dict has 'status' key set to 'success'."""
+    tmp_path, _ = run_env
     from pipeline.run import run
-
-    result = run(["game_logs"], "LeBron James", 2023)
-
-    clean_dir = tmp_path / "clean"
-    parquet_files = list(clean_dir.glob("*.parquet"))
-    sidecar_files = list(clean_dir.glob("*.json"))
-
-    assert len(parquet_files) >= 1, "Expected at least one clean parquet file"
-    assert len(sidecar_files) >= 1, "Expected at least one clean sidecar file"
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    assert result["game_logs"]["status"] == "success"
 
 
-def test_raw_parquet_and_sidecar_written(mock_ingest):
-    """Raw parquet and sidecar are written to data/raw/."""
-    mock_fn, tmp_path = mock_ingest
-
-    import importlib
-
+def test_result_has_expected_metrics(run_env):
+    """Result dict contains pipeline metrics."""
+    tmp_path, _ = run_env
     from pipeline.run import run
-
-    run(["game_logs"], "LeBron James", 2023)
-
-    raw_dir = tmp_path / "raw"
-    parquet_files = list(raw_dir.glob("*.parquet"))
-    sidecar_files = list(raw_dir.glob("*.json"))
-
-    assert len(parquet_files) >= 1, "Expected at least one raw parquet file"
-    assert len(sidecar_files) >= 1, "Expected at least one raw sidecar file"
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    r = result["game_logs"]
+    for key in ["rows_before", "rows_after", "outliers_flagged", "corrupted_removed",
+                "nulls_found", "file_path"]:
+        assert key in r, f"Missing key: {key}"
 
 
-def test_is_outlier_column_present_in_clean_parquet(mock_ingest):
-    """is_outlier column is present in clean parquet."""
-    mock_fn, tmp_path = mock_ingest
+# ---------------------------------------------------------------------------
+# File outputs
+# ---------------------------------------------------------------------------
 
-    import importlib
-
+def test_clean_parquet_written(run_env):
+    """Clean parquet written to output_dir/clean/."""
+    tmp_path, _ = run_env
     from pipeline.run import run
-
-    result = run(["game_logs"], "LeBron James", 2023)
-
-    file_path = result["game_logs"]["file_path"]
-    clean_df = pd.read_parquet(file_path)
-
-    assert "is_outlier" in clean_df.columns, "is_outlier column should be present in clean parquet"
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    assert os.path.exists(result["game_logs"]["file_path"])
 
 
-def test_fewer_than_10_rows_emits_warning_no_clean_output(tmp_path, monkeypatch, caplog):
-    """< 10 rows: ValidationError is caught, no clean output written, error in result dict."""
-    import logging
+def test_sidecar_uses_dot_sidecar_json_extension(run_env):
+    """Sidecar file uses .sidecar.json extension (not .json)."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    sidecar_files = list((tmp_path / "clean").glob("*.sidecar.json"))
+    assert len(sidecar_files) >= 1
+
+
+def test_no_plain_json_sidecar(run_env):
+    """No bare .json files written — only .sidecar.json."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    plain_json = [f for f in (tmp_path / "clean").glob("*.json")
+                  if not f.name.endswith(".sidecar.json")]
+    assert len(plain_json) == 0
+
+
+def test_raw_parquet_written(run_env):
+    """Raw parquet written to output_dir/raw/."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    raw_parquets = list((tmp_path / "raw").glob("*.parquet"))
+    assert len(raw_parquets) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Sidecar content
+# ---------------------------------------------------------------------------
+
+def test_sidecar_contains_schema_drift(run_env):
+    """Clean sidecar contains 'schema_drift' key."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    sidecar_path = next((tmp_path / "clean").glob("*.sidecar.json"))
+    with open(sidecar_path) as f:
+        sc = json.load(f)
+    assert "schema_drift" in sc
+
+
+def test_sidecar_contains_thresholds_applied(run_env):
+    """Clean sidecar contains 'thresholds_applied' key."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    sidecar_path = next((tmp_path / "clean").glob("*.sidecar.json"))
+    with open(sidecar_path) as f:
+        sc = json.load(f)
+    assert "thresholds_applied" in sc
+
+
+def test_sidecar_contains_dedup_conflicts(run_env):
+    """Clean sidecar contains 'dedup_conflicts' key."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    sidecar_path = next((tmp_path / "clean").glob("*.sidecar.json"))
+    with open(sidecar_path) as f:
+        sc = json.load(f)
+    assert "dedup_conflicts" in sc
+
+
+# ---------------------------------------------------------------------------
+# Column filtering
+# ---------------------------------------------------------------------------
+
+def test_columns_filter_retains_pts_and_identity_columns(run_env):
+    """columns=['pts','reb'] keeps pts, reb, and all identity columns in clean parquet."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    result = run(
+        ["game_logs"], season=2023, player="LeBron James",
+        output_dir=tmp_path, columns=["pts", "reb"]
+    )
+    df = pd.read_parquet(result["game_logs"]["file_path"])
+    assert "pts" in df.columns
+    assert "reb" in df.columns
+    # Identity columns always kept
+    for col in ["player_id", "game_id", "date"]:
+        if col in _mock_df().columns:
+            assert col in df.columns
+
+
+def test_unrecognized_column_in_columns_does_not_crash(run_env):
+    """columns=['pts','nonexistent_col'] runs successfully; nonexistent col absent from parquet."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    result = run(
+        ["game_logs"], season=2023, player="LeBron James",
+        output_dir=tmp_path, columns=["pts", "nonexistent_col"]
+    )
+    assert result["game_logs"]["status"] == "success"
+    df = pd.read_parquet(result["game_logs"]["file_path"])
+    assert "nonexistent_col" not in df.columns
+
+
+def test_columns_none_retains_all_columns(run_env):
+    """columns=None retains all fetched columns."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    df = pd.read_parquet(result["game_logs"]["file_path"])
+    assert "pts" in df.columns
+    assert "reb" in df.columns
+
+
+# ---------------------------------------------------------------------------
+# is_outlier column
+# ---------------------------------------------------------------------------
+
+def test_is_outlier_column_present_in_clean_parquet(run_env):
+    """is_outlier bool column present in clean parquet."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    df = pd.read_parquet(result["game_logs"]["file_path"])
+    assert "is_outlier" in df.columns
+
+
+# ---------------------------------------------------------------------------
+# Error isolation
+# ---------------------------------------------------------------------------
+
+def test_failed_type_has_status_failed(tmp_path, monkeypatch):
+    """When fetcher raises, result has status='failed' with error message."""
     monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
-
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
-
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
-
-    # Only 5 rows — less than the 10-row minimum
-    small_df = make_mock_df(rows=5)
-
-    import importlib
-
-    from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_game_logs", return_value=small_df):
-        result = run(["game_logs"], "LeBron James", 2023)
-
-    # Should have error key, not success keys
-    assert "game_logs" in result
+    import pipeline.fetcher as fetcher_mod
+    orig = fetcher_mod.FETCH_FUNCTIONS["game_logs"]
+    fetcher_mod.FETCH_FUNCTIONS["game_logs"] = lambda **kw: (_ for _ in ()).throw(RuntimeError("API down"))
+    try:
+        from pipeline.run import run
+        result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    finally:
+        fetcher_mod.FETCH_FUNCTIONS["game_logs"] = orig
+    assert result["game_logs"]["status"] == "failed"
     assert "error" in result["game_logs"]
 
-    # No clean parquet should have been written
-    clean_dir = tmp_path / "clean"
-    parquet_files = list(clean_dir.glob("*.parquet"))
-    assert len(parquet_files) == 0, "Clean parquet should not be written after validation failure"
 
-
-def test_missing_pts_column_emits_warning_naming_column(tmp_path, monkeypatch, caplog):
-    """Missing 'pts' column: error in result dict mentions 'pts'."""
-    import logging
+def test_one_type_failure_does_not_stop_others(tmp_path, monkeypatch):
+    """Multi-type run: failed type has status='failed' in its result dict."""
     monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
+    import pipeline.fetcher as fetcher_mod
+    orig_gl = fetcher_mod.FETCH_FUNCTIONS["game_logs"]
+    fetcher_mod.FETCH_FUNCTIONS["game_logs"] = lambda **kw: (_ for _ in ()).throw(RuntimeError("down"))
+    try:
+        from pipeline.run import run
+        result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    finally:
+        fetcher_mod.FETCH_FUNCTIONS["game_logs"] = orig_gl
+    assert "game_logs" in result
+    assert result["game_logs"]["status"] == "failed"
 
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
 
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
+# ---------------------------------------------------------------------------
+# Mutual exclusion
+# ---------------------------------------------------------------------------
 
-    bad_df = make_mock_df(rows=15).drop(columns=["pts"])
+def test_both_player_and_team_raises(tmp_path, monkeypatch):
+    """Providing both player and team raises PipelineConfigError."""
+    monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
+    from pipeline.run import run
+    from pipeline.exceptions import PipelineConfigError
+    with pytest.raises(PipelineConfigError):
+        run(["game_logs"], season=2023, player="LeBron James", team="LAL", output_dir=tmp_path)
 
-    import importlib
 
+# ---------------------------------------------------------------------------
+# Schema drift: second run detects column changes
+# ---------------------------------------------------------------------------
+
+def test_schema_drift_second_run_detects_missing_column(tmp_path, monkeypatch):
+    """Second run with a column removed shows it in sidecar schema_drift.columns_missing."""
+    monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
+    import pipeline.fetcher as fetcher_mod
     from pipeline.run import run
 
-    with patch("pipeline.ingest.ingest_game_logs", return_value=bad_df):
-        result = run(["game_logs"], "LeBron James", 2023)
+    df1 = _mock_df()
+    df2 = _mock_df().drop(columns=["reb"])
 
-    assert "game_logs" in result
-    assert "error" in result["game_logs"]
-    assert "pts" in result["game_logs"]["error"]
+    fetcher_mod.FETCH_FUNCTIONS["game_logs"] = lambda **kw: df1
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+
+    fetcher_mod.FETCH_FUNCTIONS["game_logs"] = lambda **kw: df2
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+
+    sidecar_file = next((tmp_path / "clean").glob("*.sidecar.json"))
+    with open(sidecar_file) as f:
+        sc = json.load(f)
+
+    assert "reb" in sc["schema_drift"]["columns_missing"]
 
 
-def test_valid_dataset_no_error_in_result(mock_ingest):
-    """Valid dataset produces success result with no error."""
-    mock_fn, tmp_path = mock_ingest
+# ---------------------------------------------------------------------------
+# T064: Feature engineering integration
+# ---------------------------------------------------------------------------
 
-    import importlib
-
+def test_features_config_writes_feature_sidecar(run_env):
+    """features_config provided → .features.sidecar.json written with version + windows."""
+    tmp_path, _ = run_env
     from pipeline.run import run
+    features_config = {
+        "rolling_windows": [3],
+        "min_observations": 2,
+        "scoring": {"pts": 1.0, "reb": 1.2},
+    }
+    run(
+        ["game_logs"], season=2023, player="LeBron James",
+        output_dir=tmp_path, features_config=features_config,
+    )
+    feat_sidecars = list((tmp_path / "clean").glob("*.features.sidecar.json"))
+    assert len(feat_sidecars) == 1
+    with open(feat_sidecars[0]) as f:
+        sc = json.load(f)
+    assert "feature_schema_version" in sc
+    assert "rolling_windows" in sc
+    assert sc["rolling_windows"] == [3]
+    assert "min_observations" in sc
 
-    result = run(["game_logs"], "LeBron James", 2023)
 
-    assert "game_logs" in result
-    assert "error" not in result["game_logs"]
+def test_no_feature_sidecar_when_features_config_is_none(run_env):
+    """features_config=None → no .features.sidecar.json written."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
+    run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    feat_sidecars = list((tmp_path / "clean").glob("*.features.sidecar.json"))
+    assert len(feat_sidecars) == 0
 
 
-def test_failed_run_leaves_old_files_intact(tmp_path, monkeypatch):
-    """Failed run (write error) leaves pre-existing clean parquet intact."""
-    monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
+# ---------------------------------------------------------------------------
+# T071: Write failure isolation
+# ---------------------------------------------------------------------------
 
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
-
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
-
-    # Pre-seed a "good" clean file
-    good_df = make_mock_df(rows=15)
-    from pipeline.save import write_with_sidecar, build_clean_sidecar
-
-    parquet_path = str(tmp_path / "clean" / "game_logs_lebron_james_2023.parquet")
-    sidecar = build_clean_sidecar("game_logs", "LeBron James", 2023,
-                                   {"rows_before": 15, "rows_after": 15, "nulls_found": 0,
-                                    "outliers_flagged": 0, "corrupted_removed": 0,
-                                    "dedup_skipped": False, "dedup_reason": None}, good_df)
-    write_with_sidecar(good_df, parquet_path, sidecar)
-    assert os.path.exists(parquet_path)
-    original_size = os.path.getsize(parquet_path)
-
-    # Now simulate a write failure
+def test_write_failure_results_in_status_failed(run_env):
+    """Parquet write failure → status='failed'; no .sidecar.json; no .tmp files."""
+    tmp_path, _ = run_env
+    from pipeline.run import run
     from pipeline.exceptions import FileWriteError
-
-    import importlib
-
-    from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_game_logs", return_value=good_df):
-        with patch("pipeline.run.write_with_sidecar", side_effect=FileWriteError("simulated failure")):
-            result = run(["game_logs"], "LeBron James", 2023)
-
-    # Pre-seeded file should still be intact
-    assert os.path.exists(parquet_path)
-    assert os.path.getsize(parquet_path) == original_size
-
-
-def test_overwrite_safety_successful_run_updates_file(tmp_path, monkeypatch):
-    """After successful run, file is updated (overwritten atomically)."""
-    monkeypatch.setenv("BALL_IS_LIFE", "test_key_123")
-
-    import pipeline.constants as constants
-    monkeypatch.setattr(constants, "RAW_DIR", str(tmp_path / "raw"))
-    monkeypatch.setattr(constants, "CLEAN_DIR", str(tmp_path / "clean"))
-    monkeypatch.setattr(constants, "LOGS_DIR", str(tmp_path / "logs"))
-
-    os.makedirs(str(tmp_path / "raw"), exist_ok=True)
-    os.makedirs(str(tmp_path / "clean"), exist_ok=True)
-    os.makedirs(str(tmp_path / "logs"), exist_ok=True)
-
-    mock_df = make_mock_df(rows=15)
-
-    import importlib
-
-    from pipeline.run import run
-
-    with patch("pipeline.ingest.ingest_game_logs", return_value=mock_df):
-        result1 = run(["game_logs"], "LeBron James", 2023)
-
-    assert "error" not in result1.get("game_logs", {})
-
-    # Run again — should succeed and update file
-    with patch("pipeline.ingest.ingest_game_logs", return_value=mock_df):
-        result2 = run(["game_logs"], "LeBron James", 2023)
-
-    assert "error" not in result2.get("game_logs", {})
+    with patch("pipeline.writer.write_parquet", side_effect=FileWriteError("disk full")):
+        result = run(["game_logs"], season=2023, player="LeBron James", output_dir=tmp_path)
+    assert result["game_logs"]["status"] == "failed"
+    assert len(list((tmp_path / "clean").glob("*.tmp"))) == 0

@@ -27,3 +27,5 @@ The backend is split into focused modules:
 - scoring.py: calculates the three signals
 - cache.py: stores results in memory
 - routers/: handles API endpoints
+- pipeline: sorts data and processes data for handling 
+(RUN ALL DATA FETCHING AND PROCESSING THROUGH THE PIPELINE)

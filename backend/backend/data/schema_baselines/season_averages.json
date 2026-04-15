@@ -1,0 +1,13 @@
+{
+  "data_type": "season_averages",
+  "columns": [
+    "ast",
+    "min",
+    "player_id",
+    "player_name",
+    "pts",
+    "reb",
+    "season"
+  ],
+  "written_at": "2026-04-14T20:26:09"
+}

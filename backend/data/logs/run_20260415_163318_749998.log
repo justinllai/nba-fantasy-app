@@ -1,0 +1,17 @@
+2026-04-15 16:33:18 | INFO | Pipeline run 20260415_163318_749998 started: data_types=['game_logs'], player='LeBron James', team=None, season=2023, columns=None
+2026-04-15 16:33:18 | INFO | Processing game_logs
+2026-04-15 16:33:18 | INFO | [game_logs] raw written: data/raw/game_logs_lebron_james_2023.parquet
+2026-04-15 16:33:18 | INFO | [game_logs] structural validation passed
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'pts'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'reb'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'ast'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'stl'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'blk'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'min'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'fg_pct'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'fg3_pct'
+2026-04-15 16:33:18 | WARNING | [game_logs] optional stat column absent: 'ft_pct'
+2026-04-15 16:33:18 | WARNING | [game_logs] schema drift: required identity columns missing: ['team_id', 'team', 'season', 'opponent']
+2026-04-15 16:33:18 | WARNING | [game_logs] schema drift: columns missing since baseline: ['ast', 'blk', 'fg3_pct', 'fg_pct', 'ft_pct', 'min', 'pts', 'reb', 'season', 'stl', 'team', 'turnover']
+2026-04-15 16:33:18 | INFO | [game_logs] clean written: data/clean/game_logs_lebron_james_2023.parquet
+2026-04-15 16:33:18 | INFO | Pipeline run 20260415_163318_749998 complete

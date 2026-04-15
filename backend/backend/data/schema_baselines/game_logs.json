@@ -1,0 +1,22 @@
+{
+  "data_type": "game_logs",
+  "columns": [
+    "ast",
+    "blk",
+    "date",
+    "fg3_pct",
+    "fg_pct",
+    "ft_pct",
+    "game_id",
+    "min",
+    "player_id",
+    "player_name",
+    "pts",
+    "reb",
+    "season",
+    "stl",
+    "team",
+    "turnover"
+  ],
+  "written_at": "2026-04-14T20:24:21"
+}

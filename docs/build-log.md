@@ -65,7 +65,21 @@ trend signal.
 - T013 — calculate_pickup_score, Signal Engine fully complete
 **Next:** T014 — cache.py in-memory cache layer
 
+## Session 8 — 04/17/26 Justin
+**Starting at:** T014 — Cache layer
+**What we built:**
+- T014 — cache.py with get_cached_players and set_cached_players (1hr expiry)
+- Updated PlayerStats to add fg_pct and ft_pct fields
+- Simplified calculate_sustainability to use percentages directly
+- Added adapt_pipeline_row for season_averages data
 
+**Key decisions:**
+- Cache expiry = 1 hour (balance freshness vs API rate limits)
+- Adapter pattern at pipeline→scoring boundary (data contract)
+- Build for season_averages first (game_logs for trend signals later)
+- Scoped project to V1 waiver wire recommender (V3 = full fantasy platform)
+
+**Next:** T015 — Wire cache into main.py
 
 
 

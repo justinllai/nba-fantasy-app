@@ -124,11 +124,23 @@ def calculate_pickup_score(player: PlayerStats) -> float:
 
 def adapt_pipeline_row(row) -> PlayerStats:
     return PlayerStats(
+        player_id = row["player_id"],
+        name = row["player_name"],
+        team = row.get("team", "UNKNOWN"),
+        position = row.get("position", "UNKNOWN"),
+        games_played = row["games_played"],
+        mins_per_game = row["min"],
         points = row["pts"],
         rebounds = row["reb"],
         assists = row["ast"],
         steals = row["stl"],
         blocks = row["blk"],
-       
-
+        turnovers = row["turnover"],
+        fg_made = row["fgm"],
+        fg_attempt = row["fga"],
+        ft_made = row["ftm"],
+        ft_attempt = row["fta"],
+        three_made = row.get("fg3m", 0.0),
+        fg_pct = row["fg_pct"],
+        ft_pct = row["ft_pct"],
     )

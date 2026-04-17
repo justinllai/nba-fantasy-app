@@ -35,7 +35,7 @@ class PlayerStats(BaseModel):
     team: str
     position: str
     games_played: int
-    mins_per_game:float
+    mins_per_game: float
     points: float
     rebounds: float
     assists: float
@@ -121,3 +121,14 @@ def calculate_pickup_score(player: PlayerStats) -> float:
 
     final_score = (replacement_normalized * SIGNAL_WEIGHTS["replacement_value"]) + (minutes_normalized * SIGNAL_WEIGHTS["minutes_trend"]) + (sustainability_normalized * SIGNAL_WEIGHTS["sustainability"])
     return final_score
+
+def adapt_pipeline_row(row) -> PlayerStats:
+    return PlayerStats(
+        points = row["pts"],
+        rebounds = row["reb"],
+        assists = row["ast"],
+        steals = row["stl"],
+        blocks = row["blk"],
+       
+
+    )

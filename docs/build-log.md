@@ -175,17 +175,204 @@ Example: `game_logs_lebron_james_2024.parquet`
 **File:** `backend/pipeline/run.py`
 
 
-# feat: NBA Stats Data Pipeline — `001-nba-stats-pipeline`
-
 ## Tech Stack
-- Backend: Python / FastAPI
-- Frontend: React
-- Data: BallDontLie API (requires API key)
+- **Backend:** Python / FastAPI
+- **Frontend:** React
+- **Data:** BallDontLie API (requires API key)
 
-## Running locally
+## Running Locally
 
 ### Backend
 ```bash
 cd backend
 pip install -r requirements.txt
 uvicorn main:app --reload
+```
+
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+## Architecture
+The backend is split into focused modules:
+
+- `main.py`: starts the server
+- `scoring.py`: calculates the three signals
+- `cache.py`: stores results in memory
+- `routers/`: handles API endpoints
+- `pipeline/`: fetches, cleans, and processes all NBA stats data
+
+**All data fetching and processing must go through the pipeline.**
+
+---
+
+## NBA Stats Pipeline
+
+### What Was Built
+The pipeline (`backend/pipeline/`) is a full data processing system that pulls NBA stats from the BallDontLie API, cleans and validates them, and writes structured parquet files for downstream use.
+
+It was built in three phases:
+
+**Phase 1 — Original build**  
+Basic ingestion, validation, cleaning, and file saving across all four data types:
+- game logs
+- box scores
+- game scores
+- season averages
+
+**Phase 2 — Architecture refactor**  
+Complete rewrite into a cleaner module structure with a new `run()` signature. Key improvements:
+- Separate `player` / `team` args (mutually exclusive)
+- Natural-grain composite deduplication (`player_id + game_id`)
+- Configurable impossible-value thresholds (upper and lower bounds)
+- Two-tier validation: structural failures halt; missing optional stats only warn
+- Schema drift tracking: baselines written on first run, diffs detected on subsequent runs
+- All API fields captured with no hardcoded column drops
+- Atomic file writes (`.tmp` then rename) for both parquet and sidecar JSON
+- Sidecar metadata files renamed from `.json` to `.sidecar.json`
+
+**Phase 3 — Feature engineering layer**  
+Optional layer activated by passing `features_config` to `run()`:
+- Leakage-safe rolling features (`.shift(1)` before `.rolling()`)
+- Rolling mean, standard deviation, and delta (trend) per stat per window
+- Fantasy points computed from a scoring weight config
+- Next-game prediction labels via `.shift(-1)`
+- SHA-256 feature schema versioning to detect training/config mismatches
+
+### Pipeline Modules
+
+| File | What it does |
+|---|---|
+| `run.py` | Single public entry point — orchestrates all steps |
+| `config.py` | All constants: thresholds, column lists, dedup keys |
+| `fetcher.py` | Pulls raw data from BallDontLie API with retry logic |
+| `validator.py` | Two-tier validation (halt vs. warn) |
+| `cleaner.py` | 10-step cleaning: nulls, dates, units, bad rows, sorting |
+| `deduplicator.py` | Composite key deduplication per data type |
+| `outlier.py` | Tukey fence outlier flagging (marks rows, never removes) |
+| `schema_drift.py` | Detects column changes against a stored baseline |
+| `sidecar.py` | Builds metadata JSON written alongside each parquet |
+| `writer.py` | Atomic parquet + sidecar file writes |
+| `features/engineer.py` | Rolling features (leakage-safe) |
+| `features/labels.py` | Next-game prediction labels |
+| `features/versioning.py` | SHA-256 feature schema versioning |
+| `exceptions.py` | All typed exceptions |
+
+## How to Use
+
+### Setup
+Create `backend/.env` with your API key:
+
+```env
+BALL_IS_LIFE=your_api_key_here
+```
+
+### Basic Usage
+```python
+from pipeline.run import run
+
+# Player game logs
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+)
+
+# Team box scores
+results = run(
+    data_types=["box_scores"],
+    season=2023,
+    team="LAL",
+)
+
+# Season averages
+results = run(
+    data_types=["season_averages"],
+    season=2023,
+    player="Stephen Curry",
+)
+
+# Multiple data types in one call
+results = run(
+    data_types=["game_logs", "season_averages"],
+    season=2023,
+    player="LeBron James",
+)
+```
+
+### Filter to Specific Columns
+Identity columns (`player_id`, `player_name`, `team`, `game_id`, `date`, `season`) are always retained regardless.
+
+```python
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+    columns=["pts", "reb", "ast"],
+)
+```
+
+### With Feature Engineering
+```python
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+    features_config={
+        "rolling_windows": [5, 10],
+        "min_observations": 5,
+        "scoring": {
+            "pts": 1.0,
+            "reb": 1.2,
+            "ast": 1.5,
+            "stl": 3.0,
+            "blk": 3.0,
+        },
+    },
+    labels_config={
+        "targets": ["pts", "reb", "ast"],
+    },
+)
+```
+
+### Return Value
+```python
+{
+    "game_logs": {
+        "status": "success",
+        "rows_before": 82,
+        "rows_after": 79,
+        "outliers_flagged": 3,
+        "corrupted_removed": 1,
+        "nulls_found": 0,
+        "file_path": "/absolute/path/to/data/clean/game_logs_lebron_james_2023.parquet",
+        "feature_schema_version": "a1b2c3d4e5f6",
+        "features_count": 24,
+    }
+}
+```
+
+On failure, a data type returns:
+
+```python
+{"status": "failed", "error": "..."}
+```
+
+One failure does not stop other data types.
+
+### Output Files
+For each run, these files are written per data type:
+- `data/raw/{type}_{subject}_{season}.parquet` — raw API data
+- `data/clean/{type}_{subject}_{season}.parquet` — cleaned data
+- `data/clean/{type}_{subject}_{season}.sidecar.json` — run metadata (row counts, drift, thresholds applied)
+- `data/clean/{type}_{subject}_{season}.features.sidecar.json` — feature metadata (if `features_config` is provided)
+
+### Running Tests
+```bash
+cd backend
+pytest tests/unit/
+pytest tests/integration/
+```

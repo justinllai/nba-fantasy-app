@@ -65,7 +65,21 @@ trend signal.
 - T013 — calculate_pickup_score, Signal Engine fully complete
 **Next:** T014 — cache.py in-memory cache layer
 
+## Session 8 — 04/17/26 Justin
+**Starting at:** T014 — Cache layer
+**What we built:**
+- T014 — cache.py with get_cached_players and set_cached_players (1hr expiry)
+- Updated PlayerStats to add fg_pct and ft_pct fields
+- Simplified calculate_sustainability to use percentages directly
+- Added adapt_pipeline_row for season_averages data
 
+**Key decisions:**
+- Cache expiry = 1 hour (balance freshness vs API rate limits)
+- Adapter pattern at pipeline→scoring boundary (data contract)
+- Build for season_averages first (game_logs for trend signals later)
+- Scoped project to V1 waiver wire recommender (V3 = full fantasy platform)
+
+**Next:** T015 — Wire cache into main.py
 
 
 
@@ -175,110 +189,170 @@ Example: `game_logs_lebron_james_2024.parquet`
 **File:** `backend/pipeline/run.py`
 
 
-# feat: NBA Stats Data Pipeline — `001-nba-stats-pipeline`
+## Tech Stack
+- **Backend:** Python / FastAPI
+- **Frontend:** React
+- **Data:** BallDontLie API (requires API key)
 
-## Overview
+## Running Locally
 
-Implements the full NBA stats data pipeline under `backend/pipeline/`. This is the foundational data layer for fantasy scoring decisions and downstream modeling. The pipeline fetches raw NBA stats from the BallDontLie API, validates and cleans them, writes compressed parquet outputs with JSON metadata sidecars, and optionally generates leakage-safe features and prediction labels.
-
-Single public entry point: `run()`. Everything else is internal.
-
----
-
-## What Was Added
-
-### `backend/pipeline/`
-
-**`run.py`** — Orchestrator and only public entry point. Executes the full pipeline sequence per data type: fetch → write raw → validate → clean → deduplicate → flag outliers → schema drift → write clean → (optional) features → (optional) labels. Per-data-type failure isolation means one bad data type never kills the rest. Feature engineering failures are also isolated — the base clean result is always preserved.
-
-**`config.py`** — Single source of truth for all constants: supported data types, identity columns, required structural fields per data type, natural-grain dedup composite keys, configurable impossible-value thresholds (upper and lower bounds), null placeholder strings, and default directory paths.
-
-**`exceptions.py`** — All typed exceptions used across the pipeline: `PipelineConfigError`, `APIKeyMissingError`, `UnsupportedDataTypeError`, `ValidationError`, `IngestionError`, `FileWriteError`, `EntityLookupError`, `FeatureVersionMismatchError`.
-
-**`fetcher.py`** — Pulls raw data from the BallDontLie API. Resolves player/team names to IDs, handles chunked ingestion, implements 3-attempt exponential backoff on failures. Flattens nested API records (player, game, team sub-objects) into flat DataFrames. Routes data types to fetch functions via a `FETCH_FUNCTIONS` table.
-
-**`validator.py`** — Two-tier validation. Missing required structural fields (`date`, `game_id`, `player_name` or `player_id`, `team` or `team_id`) raise `ValidationError` and halt that data type. Missing optional stat columns log a WARNING and allow processing to continue. All failures are collected before reporting — never halts on the first.
-
-**`cleaner.py`** — 10-step cleaning pipeline applied in a fixed order:
-1. Strip non-printable characters from string columns
-2. Normalize null placeholder strings to `NaN`
-3. Title-case player names, strip whitespace
-4. Standardize dates to `YYYY-MM-DD`
-5. Uppercase team abbreviations
-6. Convert `MM:SS` minutes strings to decimal float
-7. Remove impossible-value rows per configurable thresholds
-8. Remove DNP rows (`min == 0`)
-9. Apply column filter — always retains identity columns regardless of `columns` arg
-10. Sort time-series types chronologically by `date` then `game_id`
-
-**`deduplicator.py`** — Removes duplicates using natural-grain composite keys per data type (`player_id + game_id` for game logs and box scores, `team_id + game_id` for game scores). Falls back to name-based keys when ID columns are absent. On value conflicts, keeps the most recently ingested row and logs the conflict. `season_averages` skips deduplication. Records `dedup_skipped` and `dedup_reason` in the sidecar when dedup cannot run.
-
-**`outlier.py`** — Flags statistical outliers using the 1.5× IQR Tukey fence per numeric column. Adds an `is_outlier` boolean column set to `True` when any column falls outside the fence. Rows are never removed or modified — only marked.
-
-**`schema_drift.py`** — On first run for a data type, writes a JSON column baseline to `data/schema_baselines/`. On subsequent runs, compares current columns against the baseline. Logs added or missing columns. Logs at WARNING when a required identity column is missing. First-run sidecar notes that no drift comparison was possible.
-
-**`sidecar.py`** — Three sidecar builders:
-- `build_raw_sidecar` — row count and column list for raw files
-- `build_base_sidecar` — full cleaning stats, dedup metadata, drift metadata, threshold config used
-- `build_feature_sidecar` — feature names, rolling windows, min observation thresholds, scoring config, version hash, label metadata
-
-**`writer.py`** — Atomic file writes via write-to-`.tmp`-then-rename. Prevents partial files on failed writes. Writes snappy-compressed parquet via `pyarrow` and JSON sidecars. Sidecar is always written after parquet is confirmed on disk — never before. Provides `sidecar_path()` and `feature_sidecar_path()` helpers for consistent naming.
-
----
-
-### `backend/pipeline/features/`
-
-**`engineer.py`** — Generates leakage-safe rolling features. Uses `.shift(1)` before `.rolling()` so game N's window never includes game N's own stats. Produces `rolling_{stat}_{window}`, `rolling_std_{stat}_{window}`, `{stat}_delta_{window}`, and optionally `fantasy_pts` from a configurable scoring weight dict. Rows below the configured minimum observations threshold are set to `null`, never estimated from partial data.
-
-**`labels.py`** — Generates next-game prediction labels using `.shift(-1)` per player on a sorted time series. Produces `next_game_{target}` columns. The last game per player always receives a `null` label and is marked `is_end_of_series=True` in the sidecar. These rows are excluded from supervised training by default.
-
-**`versioning.py`** — Produces a deterministic 12-character SHA-256 hash from `features_config`. Same config always produces the same version. `assert_version_compatible()` raises `FeatureVersionMismatchError` when a stored model's feature version does not match the current config.
-
----
-
-## Output Files Per Run
-
-| File | Location | Written When |
-|------|----------|-------------|
-| `{type}_{subject}_{season}.parquet` | `data/raw/` | After successful fetch |
-| `{type}_{subject}_{season}.sidecar.json` | `data/raw/` | After raw parquet confirmed written |
-| `{type}_{subject}_{season}.parquet` | `data/clean/` | After successful clean |
-| `{type}_{subject}_{season}.sidecar.json` | `data/clean/` | After clean parquet confirmed written |
-| `{type}_{subject}_{season}.features.sidecar.json` | `data/clean/` | Only when features are generated |
-| `{type}.json` | `data/schema_baselines/` | First run per data type only |
-| `pipeline.log` | `logs/` | Continuously during run |
-
----
-
-## Key Design Decisions
-
-- **Sidecar is the success signal** — if a sidecar is absent, that run is considered incomplete regardless of whether a parquet file exists
-- **Atomic writes** — all files are written to `.tmp` first and renamed on success; failed writes leave no partial files on disk
-- **Leakage safety enforced at write time** — rolling features always use `.shift(1)` before `.rolling()`; this is not optional
-- **Configurable thresholds** — impossible-value bounds live in `config.py` and are recorded in every sidecar so every run is reproducible
-- **Per-data-type isolation** — a failure in one data type is caught, logged at ERROR, and skipped; all other data types continue
-- **Idempotent** — running with the same arguments twice produces identical outputs; filenames are deterministic and overwrite previous results
-- **Sequential API calls only** — no concurrency in v1; rate limit safety is handled by exponential backoff in `fetcher.py`
-
----
-
-## `run()` Signature
-
-```python
-def run(
-    data_types: list[str],
-    season: int,
-    player: str | int | None = None,
-    team: str | int | None = None,
-    columns: list[str] | None = None,
-    output_dir: str | Path = "data/",
-    features_config: dict | None = None,
-    labels_config: dict | None = None,
-) -> dict[str, dict]
+### Backend
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 
-Returns a dict keyed by data type:
+### Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
+## Architecture
+The backend is split into focused modules:
+
+- `main.py`: starts the server
+- `scoring.py`: calculates the three signals
+- `cache.py`: stores results in memory
+- `routers/`: handles API endpoints
+- `pipeline/`: fetches, cleans, and processes all NBA stats data
+
+**All data fetching and processing must go through the pipeline.**
+
+---
+
+## NBA Stats Pipeline
+
+### What Was Built
+The pipeline (`backend/pipeline/`) is a full data processing system that pulls NBA stats from the BallDontLie API, cleans and validates them, and writes structured parquet files for downstream use.
+
+It was built in three phases:
+
+**Phase 1 — Original build**  
+Basic ingestion, validation, cleaning, and file saving across all four data types:
+- game logs
+- box scores
+- game scores
+- season averages
+
+**Phase 2 — Architecture refactor**  
+Complete rewrite into a cleaner module structure with a new `run()` signature. Key improvements:
+- Separate `player` / `team` args (mutually exclusive)
+- Natural-grain composite deduplication (`player_id + game_id`)
+- Configurable impossible-value thresholds (upper and lower bounds)
+- Two-tier validation: structural failures halt; missing optional stats only warn
+- Schema drift tracking: baselines written on first run, diffs detected on subsequent runs
+- All API fields captured with no hardcoded column drops
+- Atomic file writes (`.tmp` then rename) for both parquet and sidecar JSON
+- Sidecar metadata files renamed from `.json` to `.sidecar.json`
+
+**Phase 3 — Feature engineering layer**  
+Optional layer activated by passing `features_config` to `run()`:
+- Leakage-safe rolling features (`.shift(1)` before `.rolling()`)
+- Rolling mean, standard deviation, and delta (trend) per stat per window
+- Fantasy points computed from a scoring weight config
+- Next-game prediction labels via `.shift(-1)`
+- SHA-256 feature schema versioning to detect training/config mismatches
+
+### Pipeline Modules
+
+| File | What it does |
+|---|---|
+| `run.py` | Single public entry point — orchestrates all steps |
+| `config.py` | All constants: thresholds, column lists, dedup keys |
+| `fetcher.py` | Pulls raw data from BallDontLie API with retry logic |
+| `validator.py` | Two-tier validation (halt vs. warn) |
+| `cleaner.py` | 10-step cleaning: nulls, dates, units, bad rows, sorting |
+| `deduplicator.py` | Composite key deduplication per data type |
+| `outlier.py` | Tukey fence outlier flagging (marks rows, never removes) |
+| `schema_drift.py` | Detects column changes against a stored baseline |
+| `sidecar.py` | Builds metadata JSON written alongside each parquet |
+| `writer.py` | Atomic parquet + sidecar file writes |
+| `features/engineer.py` | Rolling features (leakage-safe) |
+| `features/labels.py` | Next-game prediction labels |
+| `features/versioning.py` | SHA-256 feature schema versioning |
+| `exceptions.py` | All typed exceptions |
+
+## How to Use
+
+### Setup
+Create `backend/.env` with your API key:
+
+```env
+BALL_IS_LIFE=your_api_key_here
+```
+
+### Basic Usage
+```python
+from pipeline.run import run
+
+# Player game logs
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+)
+
+# Team box scores
+results = run(
+    data_types=["box_scores"],
+    season=2023,
+    team="LAL",
+)
+
+# Season averages
+results = run(
+    data_types=["season_averages"],
+    season=2023,
+    player="Stephen Curry",
+)
+
+# Multiple data types in one call
+results = run(
+    data_types=["game_logs", "season_averages"],
+    season=2023,
+    player="LeBron James",
+)
+```
+
+### Filter to Specific Columns
+Identity columns (`player_id`, `player_name`, `team`, `game_id`, `date`, `season`) are always retained regardless.
+
+```python
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+    columns=["pts", "reb", "ast"],
+)
+```
+
+### With Feature Engineering
+```python
+results = run(
+    data_types=["game_logs"],
+    season=2023,
+    player="LeBron James",
+    features_config={
+        "rolling_windows": [5, 10],
+        "min_observations": 5,
+        "scoring": {
+            "pts": 1.0,
+            "reb": 1.2,
+            "ast": 1.5,
+            "stl": 3.0,
+            "blk": 3.0,
+        },
+    },
+    labels_config={
+        "targets": ["pts", "reb", "ast"],
+    },
+)
+```
+
+### Return Value
 ```python
 {
     "game_logs": {
@@ -286,31 +360,33 @@ Returns a dict keyed by data type:
         "rows_before": 82,
         "rows_after": 79,
         "outliers_flagged": 3,
-        "corrupted_removed": 0,
-        "nulls_found": 12,
-        "file_path": "data/clean/game_logs_lebron_james_2023.parquet"
+        "corrupted_removed": 1,
+        "nulls_found": 0,
+        "file_path": "/absolute/path/to/data/clean/game_logs_lebron_james_2023.parquet",
+        "feature_schema_version": "a1b2c3d4e5f6",
+        "features_count": 24,
     }
 }
 ```
 
----
+On failure, a data type returns:
 
-## Dependencies
+```python
+{"status": "failed", "error": "..."}
+```
 
-No new dependencies added. Uses only what was already specified:
-- `pandas`
-- `pyarrow`
-- `requests`
-- `python-dotenv`
-- Python standard library
+One failure does not stop other data types.
 
----
+### Output Files
+For each run, these files are written per data type:
+- `data/raw/{type}_{subject}_{season}.parquet` — raw API data
+- `data/clean/{type}_{subject}_{season}.parquet` — cleaned data
+- `data/clean/{type}_{subject}_{season}.sidecar.json` — run metadata (row counts, drift, thresholds applied)
+- `data/clean/{type}_{subject}_{season}.features.sidecar.json` — feature metadata (if `features_config` is provided)
 
-## Testing
-
-- Unit tests for each module in `backend/pipeline/`
-- Integration test: full run for a single player season end-to-end
-- Failure isolation tests: one data type fails, others complete
-- Idempotency test: clean step run twice produces identical output
-- Leakage test: rolling features verified to use only prior rows
-- Atomic write test: simulated parquet failure leaves no files and no sidecar
+### Running Tests
+```bash
+cd backend
+pytest tests/unit/
+pytest tests/integration/
+```

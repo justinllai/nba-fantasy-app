@@ -2,17 +2,17 @@ from pydantic import BaseModel
 from typing import Optional
 
 ESPN_WEIGHTS = {
-    "points": 1.0,
-    "rebounds": 1.0,
-    "assists": 2.0,
-    "steals": 4.0,
-    "blocks": 4.0,
-    "turnovers": -2.0,
-    "fg_made": 2.0,
-    "fg_attempt": -1.0,
-    "ft_made": 1.0,
-    "ft_attempt": -1.0,
-    "three_made": 1.0
+    "pts": 1.0,
+    "reb": 1.0,
+    "ast": 2.0,
+    "stl": 4.0,
+    "blk": 4.0,
+    "turnover": -2.0,
+    "fgm": 2.0,
+    "fga": -1.0,
+    "ftm": 1.0,
+    "fta": -1.0,
+    "fg3m": 1.0
 }
 
 SIGNAL_WEIGHTS = {
@@ -36,17 +36,17 @@ class PlayerStats(BaseModel):
     position: str
     games_played: int
     mins_per_game:float
-    points: float
-    rebounds: float
-    assists: float
-    steals: float
-    blocks: float
-    turnovers: float
-    fg_made: float
-    fg_attempt: float
-    ft_made: float
-    ft_attempt: float
-    three_made: float
+    pts: float
+    reb: float
+    ast: float
+    stl: float
+    blk: float
+    turnover: float
+    fgm: float
+    fga: float
+    ftm: float
+    fta: float
+    fg3m: float
     fg_pct: float
     ft_pct: float
 
@@ -56,17 +56,17 @@ class PlayerStats(BaseModel):
 
 def calculate_fppg(player: PlayerStats) -> float:
     total = 0.0
-    total += player.points * ESPN_WEIGHTS["points"]
-    total += player.rebounds * ESPN_WEIGHTS["rebounds"]
-    total += player.assists * ESPN_WEIGHTS["assists"]
-    total += player.steals * ESPN_WEIGHTS["steals"]
-    total += player.blocks * ESPN_WEIGHTS["blocks"]
-    total += player.turnovers * ESPN_WEIGHTS["turnovers"]
-    total += player.fg_made * ESPN_WEIGHTS["fg_made"]
-    total += player.fg_attempt * ESPN_WEIGHTS["fg_attempt"]
-    total += player.ft_made * ESPN_WEIGHTS["ft_made"]
-    total += player.ft_attempt * ESPN_WEIGHTS["ft_attempt"]
-    total += player.three_made * ESPN_WEIGHTS["three_made"]
+    total += player.pts * ESPN_WEIGHTS["pts"]
+    total += player.reb * ESPN_WEIGHTS["reb"]
+    total += player.ast * ESPN_WEIGHTS["ast"]
+    total += player.stl * ESPN_WEIGHTS["stl"]
+    total += player.blk * ESPN_WEIGHTS["blk"]
+    total += player.turnover * ESPN_WEIGHTS["turnover"]
+    total += player.fgm * ESPN_WEIGHTS["fgm"]
+    total += player.fga * ESPN_WEIGHTS["fga"]
+    total += player.ftm * ESPN_WEIGHTS["ftm"]
+    total += player.fta * ESPN_WEIGHTS["fta"]
+    total += player.fg3m * ESPN_WEIGHTS["fg3m"]
     
     return total
 

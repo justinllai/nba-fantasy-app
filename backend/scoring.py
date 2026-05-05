@@ -96,8 +96,9 @@ def calculate_minutes_trend(player: PlayerStats) -> float:
     if not player.recent_minutes:
         return 0.0
 
-    first_half = player.recent_minutes[:2]
-    second_half = player.recent_minutes[2:]
+    mid = len(player.recent_minutes) // 2
+    first_half = player.recent_minutes[:mid]
+    second_half = player.recent_minutes[mid:]
 
     avg_first = sum(first_half) / len(first_half)
     avg_second = sum(second_half) / len(second_half)
